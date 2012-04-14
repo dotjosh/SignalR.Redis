@@ -1,6 +1,5 @@
 ﻿using System;
 using SignalR.Infrastructure;
-using SignalR.MessageBus;
 
 namespace SignalR.Redis
 {

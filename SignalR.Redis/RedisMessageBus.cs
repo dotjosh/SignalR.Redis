@@ -8,7 +8,6 @@ using System.Threading.Tasks;
 using BookSleeve;
 using ProtoBuf;
 using SignalR.Infrastructure;
-using SignalR.MessageBus;
 
 namespace SignalR.Redis
 {

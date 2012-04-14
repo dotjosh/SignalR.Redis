@@ -5,3 +5,4 @@
 packages/*
 artifacts/*
 msbuild.log
+*.ncrunchsolution
