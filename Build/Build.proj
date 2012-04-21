@@ -40,6 +40,10 @@
             <Find>\d+\.\d+\.\d+\.\d+</Find>
             <ReplaceWith>$(Version)</ReplaceWith>
         </RegexTransform>
+        <RegexTransform Include="$(ProjectRoot)\**\AssemblyInfo.cs">
+            <Find>\d+\.\d+\.\d+-pre</Find>
+            <ReplaceWith>$(PackageVersion)</ReplaceWith>
+        </RegexTransform>
     </ItemGroup>
     
     <Target Name="UpdateVersion" Condition="'$(BUILD_NUMBER)' != ''">
