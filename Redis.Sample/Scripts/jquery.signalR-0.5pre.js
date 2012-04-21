@@ -1,5 +1,5 @@
-﻿/*!
-* SignalR JavaScript Library v0.5
+/*!
+* SignalR JavaScript Library v0.5pre
 * http://signalr.net/
 *
 * Copyright David Fowler and Damian Edwards 2012
@@ -140,7 +140,7 @@
             window.setTimeout(function () {
                 $.ajax(connection.url + "/negotiate", {
                     global: false,
-                    type: "POST",
+                    type: "GET",
                     data: {},
                     dataType: connection.ajaxDataType,
                     error: function (error) {
@@ -682,7 +682,7 @@
                     frameId = (transportLogic.foreverFrame.count += 1),
                     url,
                     connectTimeOut,
-                    frame = $("<iframe data-signalr-connection-id='" + connection.id + "' style='position:absolute;width:0;height:0;visibility:hidden;'></iframe>");
+                    frame = $("<iframe data-signalr-connection-id='" + connection.id + "' style='position:absolute;top:0;left:0;width:0;height:0;visibility:hidden;'></iframe>");
 
                 if (window.EventSource) {
                     // If the browser supports SSE, don't use Forever Frame
