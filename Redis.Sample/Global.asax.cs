@@ -1,6 +1,7 @@
 ﻿using System;
-using SignalR.Redis;
 using System.Configuration;
+using SignalR;
+using SignalR.Redis;
 
 namespace Redis.Sample
 {
@@ -13,7 +14,7 @@ namespace Redis.Sample
             string port = ConfigurationManager.AppSettings["redis.port"];
             string password = ConfigurationManager.AppSettings["redis.password"];
 
-            SignalR.Global.DependencyResolver.UseRedis(server, Int32.Parse(port), password, "SignalR.Redis.Sample");
+            GlobalHost.DependencyResolver.UseRedis(server, Int32.Parse(port), password, "SignalR.Redis.Sample");
         }
     }
 }
