@@ -15,6 +15,18 @@
                 $('#messages').append('<li>' + message + '</li>');
             };
 
+            chat.join = function (id) {
+                $('#messages').append('<li>' + id + ' joined.</li>');
+            };
+
+            chat.drop = function (id) {
+                $('#messages').append('<li>' + id + ' dropped.</li>');
+            };
+
+            chat.reconnect = function (id) {
+                $('#messages').append('<li>' + id + ' reconnected.</li>');
+            };
+
             $("#broadcast").click(function () {
                 // Call the chat method on the server
                 chat.send($('#msg').val())
