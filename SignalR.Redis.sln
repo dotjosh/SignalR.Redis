@@ -1,13 +1,13 @@
 ﻿
-Microsoft Visual Studio Solution File, Format Version 11.00
-# Visual Studio 2010
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SignalR.Redis", "SignalR.Redis\SignalR.Redis.csproj", "{874FB920-2AB3-4769-9B90-83BF50127562}"
-EndProject
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 2012
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".nuget", ".nuget", "{2206FF75-DDB6-41BC-A35A-A735C2A8C2BE}"
 	ProjectSection(SolutionItems) = preProject
 		.nuget\NuGet.Config = .nuget\NuGet.Config
 		.nuget\NuGet.targets = .nuget\NuGet.targets
 	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SignalR.Redis", "SignalR.Redis\SignalR.Redis.csproj", "{874FB920-2AB3-4769-9B90-83BF50127562}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Redis.Sample", "Redis.Sample\Redis.Sample.csproj", "{74EEA975-6704-4377-B08C-BFB1344A6674}"
 EndProject
