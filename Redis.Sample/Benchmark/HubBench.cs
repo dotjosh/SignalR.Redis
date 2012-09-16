@@ -14,7 +14,7 @@ namespace SignalR.Redis
             var tasks = new List<Task>();
             for (int i = 0; i < clientCalls; i++)
             {
-                tasks.Add(Clients[connectionId].stepOne());
+                tasks.Add(Clients[connectionId].stepOne(i));
             }
 
             Task.WaitAll(tasks.ToArray());
@@ -26,7 +26,7 @@ namespace SignalR.Redis
         {
             for (int i = 0; i < clientCalls; i++)
             {
-                Clients.stepAll().Wait();
+                Clients.stepAll(i).Wait();
             }
 
             Clients.doneAll(start, clientCalls, Connections).Wait();
