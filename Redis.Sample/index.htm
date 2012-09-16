@@ -3,7 +3,7 @@
 <head>
     <title>SignalR with Redis</title>
     <script src="Scripts/jquery-1.7.2.min.js" type="text/javascript"></script>
-    <script src="Scripts/jquery.signalR-0.5.2.js" type="text/javascript"></script>
+    <script src="Scripts/jquery.signalR.js" type="text/javascript"></script>
     <script src="/signalr/hubs" type="text/javascript"></script>
     <script type="text/javascript">
         $(function () {
@@ -11,28 +11,29 @@
             var chat = $.connection.chat;
 
             // Declare a function on the chat hub so the server can invoke it
-            chat.addMessage = function (message) {
+            chat.client.addMessage = function (message) {
                 $('#messages').append('<li>' + message + '</li>');
             };
 
-            chat.join = function (id) {
+            chat.client.join = function (id) {
                 $('#messages').append('<li>' + id + ' joined.</li>');
             };
 
-            chat.drop = function (id) {
+            chat.client.drop = function (id) {
                 $('#messages').append('<li>' + id + ' dropped.</li>');
             };
 
-            chat.reconnect = function (id) {
+            chat.client.reconnect = function (id) {
                 $('#messages').append('<li>' + id + ' reconnected.</li>');
             };
 
             $("#broadcast").click(function () {
                 // Call the chat method on the server
-                chat.send($('#msg').val());
+                chat.server.send($('#msg').val());
             });
 
             // Start the connection
+            $.connection.hub.logging = true;
             $.connection.hub.start();
         });
     </script>

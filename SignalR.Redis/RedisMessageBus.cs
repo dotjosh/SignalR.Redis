@@ -1,230 +1,121 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Globalization;
-using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using BookSleeve;
-using ProtoBuf;
-using SignalR.Infrastructure;
+using SignalR.Redis.Infrastructure;
 
 namespace SignalR.Redis
 {
-    public class RedisMessageBus : IMessageBus, IIdGenerator<long>
+    public class RedisMessageBus : ScaleoutMessageBus
     {
-        private readonly InProcessMessageBus<long> _bus;
         private readonly int _db;
-        private readonly string _eventKey;
-        private readonly string _server;
-        private readonly int _port;
-        private readonly string _password;
-
+        private readonly string[] _channels;
         private RedisConnection _connection;
-        private bool _connectionReady;
-        private Task _connectingTask;
+        private RedisSubscriberConnection _channel;
+        private Task _connectTask;
 
-        public RedisMessageBus(string server, int port, string password, int db, string eventKey, IDependencyResolver resolver)
+        private readonly TaskQueue _publishQueue = new TaskQueue();
+
+        public RedisMessageBus(string server, int port, string password, int db, IEnumerable<string> channels, IDependencyResolver resolver)
+            : base(resolver)
         {
-            _server = server;
-            _port = port;
-            _password = password;
             _db = db;
-            _eventKey = eventKey;
-            _bus = new InProcessMessageBus<long>(resolver, this);
+            _channels = channels.ToArray();
 
-            EnsureConnection();
-        }
+            _connection = new RedisConnection(host: server, port: port, password: password);
 
-        private bool ConnectionReady
-        {
-            get
+            _connection.Closed += OnConnectionClosed;
+            _connection.Error += OnConnectionError;
+
+            // Start the connection
+            _connectTask = _connection.Open().ContinueWith(task =>
             {
-                return  _connectionReady && 
-                        _connection != null && 
-                        _connection.State == RedisConnectionBase.ConnectionState.Open;
-            }
-        }
-
-        public Task<MessageResult> GetMessages(IEnumerable<string> eventKeys, string id, CancellationToken timeoutToken)
-        {
-            return _bus.GetMessages(eventKeys, id, timeoutToken);
-        }
-
-        public Task Send(string connectionId, string eventKey, object value)
-        {
-            var message = new Message(connectionId, eventKey, value);
-            if (ConnectionReady)
-            {
-                // Publish to all nodes
-                return _connection.Publish(_eventKey, message.GetBytes());
-            }
-
-            // Open the connection if it isn't ready then publish to all nodes
-            return OpenConnection().Then((conn, msg) => conn.Publish(_eventKey, msg.GetBytes()), _connection, message);
-        }
-
-        private Task OpenConnection()
-        {
-            if (ConnectionReady)
-            {
-                // Nothing to do here
-                return TaskAsyncHelper.Empty;
-            }
-
-            try
-            {
-                EnsureConnection();
-                return _connectingTask.Catch();
-            }
-            catch (Exception ex)
-            {
-                return TaskAsyncHelper.FromError(ex);
-            }
-        }
-
-        private void EnsureConnection()
-        {
-            var tcs = new TaskCompletionSource<object>();
-
-            if (Interlocked.CompareExchange(ref _connectingTask, tcs.Task, null) != null)
-            {
-                // Give all clients the same task for reconnecting
-                return;
-            }
-
-            try
-            {
-                if (_connection == null)
+                if (task.IsFaulted)
                 {
-                    _connection = new RedisConnection(_server, _port, password: _password);
-                    _connection.Closed += (sender, e) =>
-                    {
-                        // Reconnect on close
-                        Disconnect();
-                        EnsureConnection();
-                    };
+                    // Do something useful here
+                    Debug.WriteLine(task.Exception.GetBaseException());
                 }
-
-                // Open the connection
-                _connection.Open().ContinueWith(task =>
+                else
                 {
-                    if (task.IsFaulted)
-                    {
-                        tcs.SetException(task.Exception);
-                    }
-                    else if (task.IsCanceled)
-                    {
-                        tcs.SetCanceled();
-                    }
-                    else
-                    {
-                        try
-                        {
-                            // Initialize the subscriber channel
-                            var channel = _connection.GetOpenSubscriberChannel();
+                    // Create a subscription channel in redis
+                    _channel = _connection.GetOpenSubscriberChannel();
 
-                            // Subscribe to the bus event
-                            channel.Subscribe(_eventKey, OnMessage);
+                    // Subscribe to the registered connections
+                    _channel.Subscribe(_channels, OnMessage);
+                }
+            });
+        }
 
-                            // Mark the connection as ready
-                            _connectionReady = true;
-
-                            // Mark the task as completed
-                            tcs.SetResult(null);
-                        }
-                        catch (Exception ex)
-                        {
-                            tcs.SetException(ex);
-                        }
-                    }
-                });
-            }
-            catch (Exception ex)
+        protected override Task Send(Message[] messages)
+        {
+            return Interlocked.Exchange(ref _connectTask, TaskAsyncHelper.Empty).Then(() =>
             {
-                tcs.SetException(ex);
+                var tcs = new TaskCompletionSource<object>();
+
+                SendImpl(messages.GroupBy(m => m.Source).GetEnumerator(), tcs);
+
+                return tcs.Task;
+            });
+        }
+
+        private void SendImpl(IEnumerator<IGrouping<string, Message>> enumerator, TaskCompletionSource<object> tcs)
+        {
+            if (!enumerator.MoveNext())
+            {
+                tcs.TrySetResult(null);
+            }
+            else
+            {
+                IGrouping<string, Message> group = enumerator.Current;
+
+                // Get the channel index we're going to use for this message
+                int channelIndex = Math.Abs(group.Key.GetHashCode()) % _channels.Length;
+                string channel = _channels[channelIndex];
+
+                // Increment the channel number
+                _connection.Strings.Increment(_db, channel).Then((id, ch) =>
+                {
+                    var message = new RedisMessage(id, group.ToArray());
+
+                    return _connection.Publish(ch, message.GetBytes());
+                },
+                channel).Then(() => SendImpl(enumerator, tcs));
             }
         }
 
-        private void Disconnect()
+        private void OnConnectionClosed(object sender, EventArgs e)
         {
-            Interlocked.Exchange(ref _connectingTask, null);
-            _connectionReady = false;
-            _connection = null;
+            // Should we auto reconnect?
+        }
+
+        private void OnConnectionError(object sender, BookSleeve.ErrorEventArgs e)
+        {
+            // How do we bubble errors?
         }
 
         private void OnMessage(string key, byte[] data)
         {
-            var message = Message.Deserialize(data);
-
-            try
-            {
-                // Save it to the local buffer
-                _bus.Send(message.ConnectionId, message.EventKey, message.Value).Catch();
-            }
-            catch (Exception ex)
-            {
-                // TODO: Handle this better
-                Debug.WriteLine(ex.Message);
-            }
+            // The key is the stream id (channel)
+            var message = RedisMessage.Deserialize(data);
+ 
+            _publishQueue.Enqueue(() => OnReceived(key, (ulong)message.Id, message.Messages));
         }
 
-        public long ConvertFromString(string value)
+        public override void Dispose()
         {
-            return Int64.Parse(value, CultureInfo.InvariantCulture);
-        }
-
-        public string ConvertToString(long value)
-        {
-            return value.ToString(CultureInfo.InvariantCulture);
-        }
-
-        // TODO: Consider implementing something like flake (http://blog.boundary.com/2012/01/12/Flake-A-decentralized-k-ordered-id-generation-service-in-Erlang.html)
-        public long GetNext()
-        {            
-            // TODO: Make this non-blocking in SignalR
-            return _connection.Wait(_connection.Strings.Increment(_db, _eventKey));
-        }
-
-        [ProtoContract]
-        private class Message
-        {
-            public Message()
+            if (_channel != null)
             {
+                _channel.Unsubscribe(_channels);
+                _channel.Close(abort: true);
             }
 
-            public Message(string connectionId, string eventKey, object value)
+            if (_connection != null)
             {
-                ConnectionId = connectionId;
-                EventKey = eventKey;
-                Value = value.ToString();
+                _connection.Close(abort: true);
             }
-
-            [ProtoMember(1)]
-            public string ConnectionId { get; set; }
-
-            [ProtoMember(2)]
-            public string EventKey { get; set; }
-
-            [ProtoMember(3)]
-            public string Value { get; set; }
-
-            public byte[] GetBytes()
-            {
-                using (var ms = new MemoryStream())
-                {
-                    Serializer.Serialize(ms, this);
-                    return ms.ToArray();
-                }
-            }
-
-            public static Message Deserialize(byte[] data)
-            {
-                using (var ms = new MemoryStream(data))
-                {
-                    return Serializer.Deserialize<Message>(ms);
-                }
-            }
-        }
+        }        
     }
 }

@@ -12,7 +12,7 @@ namespace SignalR.Redis
 
         public static IDependencyResolver UseRedis(this IDependencyResolver resolver, string server, int port, string password, int db, string eventKey)
         {
-            var bus = new Lazy<RedisMessageBus>(() => new RedisMessageBus(server, port, password, db, eventKey, resolver));
+            var bus = new Lazy<RedisMessageBus>(() => new RedisMessageBus(server, port, password, db, new[] { eventKey }, resolver));
             resolver.Register(typeof(IMessageBus), () => bus.Value);
 
             return resolver;
