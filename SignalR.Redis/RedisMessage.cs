@@ -7,6 +7,8 @@ namespace SignalR.Redis
     [Serializable]
     public class RedisMessage
     {
+        private static readonly BinaryFormatter formatter = new BinaryFormatter();
+
         public RedisMessage()
         {
         }
@@ -23,7 +25,6 @@ namespace SignalR.Redis
 
         public byte[] GetBytes()
         {
-            var formatter = new BinaryFormatter();
             using (var ms = new MemoryStream())
             {
                 formatter.Serialize(ms, this);
@@ -33,7 +34,6 @@ namespace SignalR.Redis
 
         public static RedisMessage Deserialize(byte[] data)
         {
-            var formatter = new BinaryFormatter();
             using (var ms = new MemoryStream(data))
             {
                 return (RedisMessage)formatter.Deserialize(ms);

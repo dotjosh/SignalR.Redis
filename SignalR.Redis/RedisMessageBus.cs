@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
 using BookSleeve;
 using SignalR.Redis.Infrastructure;
@@ -31,41 +29,37 @@ namespace SignalR.Redis
             _connection.Error += OnConnectionError;
 
             // Start the connection
-            _connectTask = _connection.Open().ContinueWith(task =>
+            _connectTask = _connection.Open().Then(() =>
             {
-                if (task.IsFaulted)
-                {
-                    // Do something useful here
-                    Debug.WriteLine(task.Exception.GetBaseException());
-                }
-                else
-                {
-                    // Create a subscription channel in redis
-                    _channel = _connection.GetOpenSubscriberChannel();
+                // Create a subscription channel in redis
+                _channel = _connection.GetOpenSubscriberChannel();
 
-                    // Subscribe to the registered connections
-                    _channel.Subscribe(_channels, OnMessage);
-                }
+                // Subscribe to the registered connections
+                _channel.Subscribe(_channels, OnMessage);
             });
         }
 
         protected override Task Send(Message[] messages)
         {
-            return Interlocked.Exchange(ref _connectTask, TaskAsyncHelper.Empty).Then(() =>
+            return _connectTask.Then(msgs =>
             {
-                var tcs = new TaskCompletionSource<object>();
+                var taskCompletionSource = new TaskCompletionSource<object>();
 
-                SendImpl(messages.GroupBy(m => m.Source).GetEnumerator(), tcs);
+                // Group messages by source (connection id)
+                var messagesBySource = msgs.GroupBy(m => m.Source);
 
-                return tcs.Task;
-            });
+                SendImpl(messagesBySource.GetEnumerator(), taskCompletionSource);
+
+                return taskCompletionSource.Task;
+            },
+            messages);
         }
 
-        private void SendImpl(IEnumerator<IGrouping<string, Message>> enumerator, TaskCompletionSource<object> tcs)
+        private void SendImpl(IEnumerator<IGrouping<string, Message>> enumerator, TaskCompletionSource<object> taskCompletionSource)
         {
             if (!enumerator.MoveNext())
             {
-                tcs.TrySetResult(null);
+                taskCompletionSource.TrySetResult(null);
             }
             else
             {
@@ -73,16 +67,18 @@ namespace SignalR.Redis
 
                 // Get the channel index we're going to use for this message
                 int channelIndex = Math.Abs(group.Key.GetHashCode()) % _channels.Length;
+
                 string channel = _channels[channelIndex];
 
                 // Increment the channel number
-                _connection.Strings.Increment(_db, channel).Then((id, ch) =>
-                {
-                    var message = new RedisMessage(id, group.ToArray());
+                _connection.Strings.Increment(_db, channel)
+                                   .Then((id, ch) =>
+                                   {
+                                       var message = new RedisMessage(id, group.ToArray());
 
-                    return _connection.Publish(ch, message.GetBytes());
-                },
-                channel).Then(() => SendImpl(enumerator, tcs));
+                                       return _connection.Publish(ch, message.GetBytes());
+                                   }, channel)
+                                   .Then((enumer, tcs) => SendImpl(enumer, tcs), enumerator, taskCompletionSource);
             }
         }
 
@@ -100,7 +96,7 @@ namespace SignalR.Redis
         {
             // The key is the stream id (channel)
             var message = RedisMessage.Deserialize(data);
- 
+
             _publishQueue.Enqueue(() => OnReceived(key, (ulong)message.Id, message.Messages));
         }
 
@@ -116,6 +112,6 @@ namespace SignalR.Redis
             {
                 _connection.Close(abort: true);
             }
-        }        
+        }
     }
 }

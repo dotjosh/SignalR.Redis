@@ -14,7 +14,9 @@ namespace Redis.Sample
             string port = ConfigurationManager.AppSettings["redis.port"];
             string password = ConfigurationManager.AppSettings["redis.password"];
 
-            GlobalHost.DependencyResolver.UseRedis(server, Int32.Parse(port), password, "SignalR.Redis.Sample");
+            var keys = new[] { "topic1", "topic2" };
+
+            GlobalHost.DependencyResolver.UseRedis(server, Int32.Parse(port), password, keys);
         }
     }
 }
