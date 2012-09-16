@@ -10,18 +10,18 @@ namespace SignalR.Redis
     public class RedisMessageBus : ScaleoutMessageBus
     {
         private readonly int _db;
-        private readonly string[] _channels;
+        private readonly string[] _keys;
         private RedisConnection _connection;
         private RedisSubscriberConnection _channel;
         private Task _connectTask;
 
         private readonly TaskQueue _publishQueue = new TaskQueue();
 
-        public RedisMessageBus(string server, int port, string password, int db, IEnumerable<string> channels, IDependencyResolver resolver)
+        public RedisMessageBus(string server, int port, string password, int db, IEnumerable<string> keys, IDependencyResolver resolver)
             : base(resolver)
         {
             _db = db;
-            _channels = channels.ToArray();
+            _keys = keys.ToArray();
 
             _connection = new RedisConnection(host: server, port: port, password: password);
 
@@ -35,7 +35,7 @@ namespace SignalR.Redis
                 _channel = _connection.GetOpenSubscriberChannel();
 
                 // Subscribe to the registered connections
-                _channel.Subscribe(_channels, OnMessage);
+                _channel.Subscribe(_keys, OnMessage);
             });
         }
 
@@ -66,18 +66,18 @@ namespace SignalR.Redis
                 IGrouping<string, Message> group = enumerator.Current;
 
                 // Get the channel index we're going to use for this message
-                int channelIndex = Math.Abs(group.Key.GetHashCode()) % _channels.Length;
+                int index = Math.Abs(group.Key.GetHashCode()) % _keys.Length;
 
-                string channel = _channels[channelIndex];
+                string key = _keys[index];
 
                 // Increment the channel number
-                _connection.Strings.Increment(_db, channel)
-                                   .Then((id, ch) =>
+                _connection.Strings.Increment(_db, key)
+                                   .Then((id, k) =>
                                    {
                                        var message = new RedisMessage(id, group.ToArray());
 
-                                       return _connection.Publish(ch, message.GetBytes());
-                                   }, channel)
+                                       return _connection.Publish(k, message.GetBytes());
+                                   }, key)
                                    .Then((enumer, tcs) => SendImpl(enumer, tcs), enumerator, taskCompletionSource);
             }
         }
@@ -104,7 +104,7 @@ namespace SignalR.Redis
         {
             if (_channel != null)
             {
-                _channel.Unsubscribe(_channels);
+                _channel.Unsubscribe(_keys);
                 _channel.Close(abort: true);
             }
 
