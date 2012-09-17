@@ -1,18 +1,12 @@
 ﻿using System;
-using System.IO;
-using System.Runtime.Serialization.Formatters.Binary;
+using System.Text;
+using Newtonsoft.Json;
 
 namespace SignalR.Redis
 {
     [Serializable]
     public class RedisMessage
     {
-        private static readonly BinaryFormatter formatter = new BinaryFormatter();
-
-        public RedisMessage()
-        {
-        }
-
         public RedisMessage(long id, Message[] message)
         {
             Id = id;
@@ -25,19 +19,14 @@ namespace SignalR.Redis
 
         public byte[] GetBytes()
         {
-            using (var ms = new MemoryStream())
-            {
-                formatter.Serialize(ms, this);
-                return ms.ToArray();
-            }
+            var s = JsonConvert.SerializeObject(this);
+            return Encoding.UTF8.GetBytes(s);
         }
 
         public static RedisMessage Deserialize(byte[] data)
         {
-            using (var ms = new MemoryStream(data))
-            {
-                return (RedisMessage)formatter.Deserialize(ms);
-            }
+            var s = Encoding.UTF8.GetString(data);
+            return JsonConvert.DeserializeObject<RedisMessage>(s);
         }
     }
 }
