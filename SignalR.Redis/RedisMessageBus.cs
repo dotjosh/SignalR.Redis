@@ -78,7 +78,8 @@ namespace SignalR.Redis
 
                                        return _connection.Publish(k, message.GetBytes());
                                    }, key)
-                                   .Then((enumer, tcs) => SendImpl(enumer, tcs), enumerator, taskCompletionSource);
+                                   .Then((enumer, tcs) => SendImpl(enumer, tcs), enumerator, taskCompletionSource)
+                                   .ContinueWithNotComplete(taskCompletionSource);
             }
         }
 
