@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using BookSleeve;
 using SignalR.Redis.Infrastructure;
@@ -36,6 +37,13 @@ namespace SignalR.Redis
 
                 // Subscribe to the registered connections
                 _channel.Subscribe(_keys, OnMessage);
+
+                // Dirty hack but it seems like subscribe returns before the actual
+                // subscription is properly setup in some cases
+                while (_channel.SubscriptionCount == 0)
+                {
+                    Thread.Sleep(500);
+                }
             });
         }
 
